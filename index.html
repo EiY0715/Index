@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>欠課時数管理アプリ</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Supabaseを読み込むための追加行 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
@@ -22,20 +21,17 @@
     <p id="status-text" class="text-xs text-gray-500 mb-6">Supabaseと通信中...</p>
 
     <div id="subject-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <!-- ここに科目が生成されます -->
     </div>
   </div>
 
   <script>
-    // ★ここにSupabaseのURLとAPIキーを貼り付けてください
+    // いただいたURLとキーを直接埋め込んであります（/rest/v1/ は除外済み）
     const SUPABASE_URL = 'https://cueqriqmqzwewmarlpvv.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_I4NybiA8sCkFC_4OiktVKw_2FZ4qhmn';
+    const SUPABASE_ANON_KEY = 'sb_publishable_I4NybiA8sCkFC_4OiktVKw_2FZ4qhmn';
     
-    // Supabaseの接続設定
     const { createClient } = supabase;
     const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // 初期データ
     const initialData = [
       { id: "kokugo", name: "論理国語", remaining: 16 },
       { id: "koten", name: "古典研究", remaining: 18 },
@@ -54,66 +50,46 @@ const SUPABASE_ANON_KEY = 'sb_publishable_I4NybiA8sCkFC_4OiktVKw_2FZ4qhmn';
     const statusText = document.getElementById("status-text");
     let subjects = JSON.parse(JSON.stringify(initialData));
 
-    // Supabaseからデータを読み込み
     async function loadData() {
       try {
         statusText.textContent = "同期中...";
-        const { data, error } = await supabaseClient
-          .from('app_state')
-          .select('data')
-          .eq('id', 1)
-          .single();
+        const { data, error } = await supabaseClient.from('app_state').select('data').eq('id', 1).single();
 
-        if (error && error.code !== 'PGRST116') { // データなしエラー以外は警告
+        if (error && error.code !== 'PGRST116') { 
           console.error(error);
-          statusText.textContent = "通信エラーが発生しました";
+          statusText.textContent = "エラー：Supabaseに「app_state」という箱がありません";
           return;
         }
 
         if (data && data.data) {
           subjects = data.data;
         } else {
-          // データがない場合は初期状態を保存
           await saveData(subjects);
         }
-        statusText.textContent = "同期完了（Supabase接続中）";
+        statusText.textContent = "同期完了（全端末で共有中）";
       } catch (e) {
-        statusText.textContent = "通信エラー：URLやAPIキーを確認してください";
+        statusText.textContent = "通信エラーが発生しました";
       }
       render();
     }
 
-    // Supabaseへデータを保存
     async function saveData(dataToSave) {
       try {
         statusText.textContent = "保存中...";
-        const { error } = await supabaseClient
-          .from('app_state')
-          .upsert({ id: 1, data: dataToSave });
-          
+        const { error } = await supabaseClient.from('app_state').upsert({ id: 1, data: dataToSave });
         if (error) throw error;
         statusText.textContent = "保存完了";
       } catch (e) {
         statusText.textContent = "保存エラーが発生しました";
-        console.error(e);
       }
     }
 
-    // 画面の描画処理
     function render() {
       const container = document.getElementById("subject-list");
       container.innerHTML = "";
-
       subjects.forEach((subject, index) => {
-        let textColorClass = "text-green-600";
-        let bgColorClass = "bg-green-100";
-        if (subject.remaining <= 3) {
-          textColorClass = "text-red-600";
-          bgColorClass = "bg-red-100";
-        } else if (subject.remaining <= 7) {
-          textColorClass = "text-orange-600";
-          bgColorClass = "bg-orange-100";
-        }
+        let textColorClass = subject.remaining <= 3 ? "text-red-600" : (subject.remaining <= 7 ? "text-orange-600" : "text-green-600");
+        let bgColorClass = subject.remaining <= 3 ? "bg-red-100" : (subject.remaining <= 7 ? "bg-orange-100" : "bg-green-100");
 
         const card = document.createElement("div");
         card.className = "bg-white rounded-xl shadow-sm p-4 flex items-center justify-between";
@@ -127,29 +103,20 @@ const SUPABASE_ANON_KEY = 'sb_publishable_I4NybiA8sCkFC_4OiktVKw_2FZ4qhmn';
             </div>
           </div>
           <div class="flex space-x-2">
-            <button onclick="updateCount(${index}, 1)" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 font-bold text-xl transition-colors">
-              +
-            </button>
-            <button onclick="updateCount(${index}, -1)" class="w-10 h-10 rounded-full ${bgColorClass} ${textColorClass} hover:opacity-80 flex items-center justify-center font-bold text-xl transition-colors">
-              -
-            </button>
+            <button onclick="updateCount(${index}, 1)" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 font-bold text-xl transition-colors">+</button>
+            <button onclick="updateCount(${index}, -1)" class="w-10 h-10 rounded-full ${bgColorClass} ${textColorClass} hover:opacity-80 flex items-center justify-center font-bold text-xl transition-colors">-</button>
           </div>
         `;
         container.appendChild(card);
       });
     }
 
-    // 回数の増減処理
     window.updateCount = async function(index, change) {
-      subjects[index].remaining += change;
-      if (subjects[index].remaining < 0) {
-        subjects[index].remaining = 0;
-      }
+      subjects[index].remaining = Math.max(0, subjects[index].remaining + change);
       render();
-      await saveData(subjects); // 押すたびにSupabaseに保存
+      await saveData(subjects); 
     };
 
-    // リセットボタンの処理
     document.getElementById("reset-btn").addEventListener("click", async () => {
       if (confirm("記録を最初の状態（写真の値）にリセットしますか？")) {
         subjects = JSON.parse(JSON.stringify(initialData));
@@ -158,7 +125,6 @@ const SUPABASE_ANON_KEY = 'sb_publishable_I4NybiA8sCkFC_4OiktVKw_2FZ4qhmn';
       }
     });
 
-    // 初回実行
     loadData();
   </script>
 </body>
