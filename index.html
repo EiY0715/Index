@@ -5,26 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>欠課時数管理アプリ</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabaseを読み込むための追加行 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
   </style>
 </head>
 <body class="bg-gray-100 text-gray-800 p-4 md:p-8">
   <div class="max-w-2xl mx-auto">
-    <div class="flex justify-between items-center mb-6">
+    <div class="flex justify-between items-center mb-2">
       <h1 class="text-xl md:text-2xl font-bold">残り休める回数チェッカー</h1>
       <button id="reset-btn" class="text-sm bg-red-100 text-red-600 hover:bg-red-200 px-3 py-1.5 rounded-lg transition-colors font-semibold">
         初期値に戻す
       </button>
     </div>
+    <p id="status-text" class="text-xs text-gray-500 mb-6">Supabaseと通信中...</p>
 
     <div id="subject-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <!-- ここに科目がJavaScriptで生成されます -->
+      <!-- ここに科目が生成されます -->
     </div>
   </div>
 
   <script>
-    // 写真右側の「残り休める回数（欠課オーバーまでの回数）」の初期データ[cite: 1]
+    // ★ここにSupabaseのURLとAPIキーを貼り付けてください
+    const SUPABASE_URL = 'ここにURLを貼る';
+    const SUPABASE_ANON_KEY = 'ここにAPIキーを貼る';
+    
+    // Supabaseの接続設定
+    const { createClient } = supabase;
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // 初期データ
     const initialData = [
       { id: "kokugo", name: "論理国語", remaining: 16 },
       { id: "koten", name: "古典研究", remaining: 18 },
@@ -40,39 +51,72 @@
       { id: "science", name: "総合科学探究 II", remaining: 12 }
     ];
 
-    // ローカルストレージからデータを取得、なければ初期データを使用
-    function loadData() {
-      const savedData = localStorage.getItem('attendanceData');
-      return savedData ? JSON.parse(savedData) : JSON.parse(JSON.stringify(initialData));
+    const statusText = document.getElementById("status-text");
+    let subjects = JSON.parse(JSON.stringify(initialData));
+
+    // Supabaseからデータを読み込み
+    async function loadData() {
+      try {
+        statusText.textContent = "同期中...";
+        const { data, error } = await supabaseClient
+          .from('app_state')
+          .select('data')
+          .eq('id', 1)
+          .single();
+
+        if (error && error.code !== 'PGRST116') { // データなしエラー以外は警告
+          console.error(error);
+          statusText.textContent = "通信エラーが発生しました";
+          return;
+        }
+
+        if (data && data.data) {
+          subjects = data.data;
+        } else {
+          // データがない場合は初期状態を保存
+          await saveData(subjects);
+        }
+        statusText.textContent = "同期完了（Supabase接続中）";
+      } catch (e) {
+        statusText.textContent = "通信エラー：URLやAPIキーを確認してください";
+      }
+      render();
     }
 
-    // データをローカルストレージに保存
-    function saveData(data) {
-      localStorage.setItem('attendanceData', JSON.stringify(data));
+    // Supabaseへデータを保存
+    async function saveData(dataToSave) {
+      try {
+        statusText.textContent = "保存中...";
+        const { error } = await supabaseClient
+          .from('app_state')
+          .upsert({ id: 1, data: dataToSave });
+          
+        if (error) throw error;
+        statusText.textContent = "保存完了";
+      } catch (e) {
+        statusText.textContent = "保存エラーが発生しました";
+        console.error(e);
+      }
     }
-
-    let subjects = loadData();
 
     // 画面の描画処理
     function render() {
-      const container = document.getElementById('subject-list');
-      container.innerHTML = '';
+      const container = document.getElementById("subject-list");
+      container.innerHTML = "";
 
       subjects.forEach((subject, index) => {
-        // 残り回数に応じた色分け（3回以下で赤、7回以下でオレンジ）
-        let textColorClass = 'text-green-600';
-        let bgColorClass = 'bg-green-100';
+        let textColorClass = "text-green-600";
+        let bgColorClass = "bg-green-100";
         if (subject.remaining <= 3) {
-          textColorClass = 'text-red-600';
-          bgColorClass = 'bg-red-100';
+          textColorClass = "text-red-600";
+          bgColorClass = "bg-red-100";
         } else if (subject.remaining <= 7) {
-          textColorClass = 'text-orange-600';
-          bgColorClass = 'bg-orange-100';
+          textColorClass = "text-orange-600";
+          bgColorClass = "bg-orange-100";
         }
 
-        const card = document.createElement('div');
-        card.className = 'bg-white rounded-xl shadow-sm p-4 flex items-center justify-between';
-        
+        const card = document.createElement("div");
+        card.className = "bg-white rounded-xl shadow-sm p-4 flex items-center justify-between";
         card.innerHTML = `
           <div class="flex-1">
             <h2 class="font-bold text-gray-700">${subject.name}</h2>
@@ -96,27 +140,26 @@
     }
 
     // 回数の増減処理
-    window.updateCount = function(index, change) {
+    window.updateCount = async function(index, change) {
       subjects[index].remaining += change;
-      // 0未満にはならないようにする
       if (subjects[index].remaining < 0) {
         subjects[index].remaining = 0;
       }
-      saveData(subjects);
       render();
+      await saveData(subjects); // 押すたびにSupabaseに保存
     };
 
     // リセットボタンの処理
-    document.getElementById('reset-btn').addEventListener('click', () => {
-      if(confirm('記録を最初の状態（写真の値）にリセットしますか？')) {
+    document.getElementById("reset-btn").addEventListener("click", async () => {
+      if (confirm("記録を最初の状態（写真の値）にリセットしますか？")) {
         subjects = JSON.parse(JSON.stringify(initialData));
-        saveData(subjects);
         render();
+        await saveData(subjects);
       }
     });
 
-    // 初回描画
-    render();
+    // 初回実行
+    loadData();
   </script>
 </body>
 </html>
