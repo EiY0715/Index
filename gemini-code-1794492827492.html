@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>欠課時数管理アプリ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-800 p-4 md:p-8">
+  <div class="max-w-2xl mx-auto">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-xl md:text-2xl font-bold">残り休める回数チェッカー</h1>
+      <button id="reset-btn" class="text-sm bg-red-100 text-red-600 hover:bg-red-200 px-3 py-1.5 rounded-lg transition-colors font-semibold">
+        初期値に戻す
+      </button>
+    </div>
+
+    <div id="subject-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- ここに科目がJavaScriptで生成されます -->
+    </div>
+  </div>
+
+  <script>
+    // 写真右側の「残り休める回数（欠課オーバーまでの回数）」の初期データ[cite: 1]
+    const initialData = [
+      { id: "kokugo", name: "論理国語", remaining: 16 },
+      { id: "koten", name: "古典研究", remaining: 18 },
+      { id: "chiri", name: "地理探究", remaining: 22 },
+      { id: "math3", name: "数学III", remaining: 31 },
+      { id: "mathC", name: "数学C", remaining: 16 },
+      { id: "physics", name: "物理", remaining: 20 },
+      { id: "chemistry", name: "化学", remaining: 18 },
+      { id: "pe", name: "体育", remaining: 25 },
+      { id: "english3", name: "英語コミュニケーションIII", remaining: 31 },
+      { id: "logic", name: "論理・表現III", remaining: 13 },
+      { id: "info", name: "情報 I Plus", remaining: 8 },
+      { id: "science", name: "総合科学探究 II", remaining: 12 }
+    ];
+
+    // ローカルストレージからデータを取得、なければ初期データを使用
+    function loadData() {
+      const savedData = localStorage.getItem('attendanceData');
+      return savedData ? JSON.parse(savedData) : JSON.parse(JSON.stringify(initialData));
+    }
+
+    // データをローカルストレージに保存
+    function saveData(data) {
+      localStorage.setItem('attendanceData', JSON.stringify(data));
+    }
+
+    let subjects = loadData();
+
+    // 画面の描画処理
+    function render() {
+      const container = document.getElementById('subject-list');
+      container.innerHTML = '';
+
+      subjects.forEach((subject, index) => {
+        // 残り回数に応じた色分け（3回以下で赤、7回以下でオレンジ）
+        let textColorClass = 'text-green-600';
+        let bgColorClass = 'bg-green-100';
+        if (subject.remaining <= 3) {
+          textColorClass = 'text-red-600';
+          bgColorClass = 'bg-red-100';
+        } else if (subject.remaining <= 7) {
+          textColorClass = 'text-orange-600';
+          bgColorClass = 'bg-orange-100';
+        }
+
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-xl shadow-sm p-4 flex items-center justify-between';
+        
+        card.innerHTML = `
+          <div class="flex-1">
+            <h2 class="font-bold text-gray-700">${subject.name}</h2>
+            <div class="flex items-baseline mt-1">
+              <span class="text-sm text-gray-500 mr-2">残り</span>
+              <span class="text-2xl font-extrabold ${textColorClass}">${subject.remaining}</span>
+              <span class="text-sm text-gray-500 ml-1">回</span>
+            </div>
+          </div>
+          <div class="flex space-x-2">
+            <button onclick="updateCount(${index}, 1)" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 font-bold text-xl transition-colors">
+              +
+            </button>
+            <button onclick="updateCount(${index}, -1)" class="w-10 h-10 rounded-full ${bgColorClass} ${textColorClass} hover:opacity-80 flex items-center justify-center font-bold text-xl transition-colors">
+              -
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // 回数の増減処理
+    window.updateCount = function(index, change) {
+      subjects[index].remaining += change;
+      // 0未満にはならないようにする
+      if (subjects[index].remaining < 0) {
+        subjects[index].remaining = 0;
+      }
+      saveData(subjects);
+      render();
+    };
+
+    // リセットボタンの処理
+    document.getElementById('reset-btn').addEventListener('click', () => {
+      if(confirm('記録を最初の状態（写真の値）にリセットしますか？')) {
+        subjects = JSON.parse(JSON.stringify(initialData));
+        saveData(subjects);
+        render();
+      }
+    });
+
+    // 初回描画
+    render();
+  </script>
+</body>
+</html>
